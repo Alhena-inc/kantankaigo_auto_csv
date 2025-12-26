@@ -82,33 +82,54 @@ vercel
 
 または、GitHubにプッシュすると自動的にデプロイされます。
 
-## 注意事項
+## ⚠️ 重要な注意事項
 
-### Vercelでの制限
+### Vercelでの制限と問題
 
-Vercelのサーバーレス関数には以下の制限があります：
+**Vercelのサーバーレス環境では、このアプリケーションは動作しません。**
 
-1. **実行時間**: 最大300秒（5分）
-2. **メモリ**: 最大1024MB
-3. **ChromeDriver**: Vercelの環境ではChromeDriverが利用できない可能性があります
+理由：
+1. **Selenium/ChromeDriverが動作しない**: Vercelの環境にはChromeDriverやChromeバイナリがインストールされていません
+2. **Pythonスクリプトの実行制限**: サーバーレス関数はリクエスト終了後にプロセスが終了するため、長時間実行されるバックグラウンドジョブが動作しません
+3. **実行時間制限**: 最大300秒（5分）の制限がありますが、Selenium処理はそれ以上かかる可能性があります
 
 ### 推奨される代替案
 
-VercelでSeleniumを実行するのは難しいため、以下の代替案を検討してください：
+このアプリケーションを本番環境で使用するには、以下のいずれかの方法を推奨します：
 
-1. **別のホスティングサービスを使用**
-   - Railway
-   - Render
-   - AWS Lambda (ChromeDriver対応)
+#### 1. 別のホスティングサービスを使用（推奨）
 
-2. **Puppeteer/Playwrightを使用**
-   - Node.jsネイティブのヘッドレスブラウザ
-   - Vercelでより動作しやすい可能性があります
+以下のサービスでは、Selenium/ChromeDriverが動作します：
 
-3. **外部APIサービスを使用**
-   - ScrapingBee
-   - Apify
-   - Browserless
+- **Railway** (https://railway.app)
+  - Python環境とChromeDriverをサポート
+  - 無料プランあり
+  - デプロイが簡単
+
+- **Render** (https://render.com)
+  - Webサービスとしてデプロイ可能
+  - 無料プランあり
+
+- **Fly.io** (https://fly.io)
+  - Dockerコンテナとしてデプロイ可能
+  - ChromeDriverを含むカスタムイメージを作成可能
+
+#### 2. Puppeteer/Playwrightに変更
+
+Node.jsネイティブのヘッドレスブラウザを使用：
+
+- **Puppeteer**: Chrome/Chromiumを制御
+- **Playwright**: 複数ブラウザをサポート
+
+これらはVercelでも動作する可能性がありますが、設定が複雑です。
+
+#### 3. 外部スクレイピングサービスを使用
+
+- **Browserless** (https://www.browserless.io)
+- **ScrapingBee** (https://www.scrapingbee.com)
+- **Apify** (https://apify.com)
+
+これらのサービスは、Selenium/Puppeteerをクラウドで実行します。
 
 ## 使用方法
 
