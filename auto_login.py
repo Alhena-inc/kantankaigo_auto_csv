@@ -144,7 +144,8 @@ class KantanKaigoFastScraper:
                 for wait_attempt in range(15):  # 最大15秒待機
                     try:
                         # 要素の存在確認
-                        element = self.driver.find_element(By.ID, "serviceDate")
+                        element = self.driver.find_element(
+                            By.ID, "serviceDate")
                         if element:
                             # 値が設定されているか確認
                             current_date_val = self.driver.execute_script(
@@ -156,7 +157,8 @@ class KantanKaigoFastScraper:
                         pass
                     time.sleep(1)
                     if wait_attempt % 3 == 0:  # 3秒ごとにログ出力
-                        logger.debug(f"  serviceDate要素を待機中... ({wait_attempt + 1}/15)")
+                        logger.debug(
+                            f"  serviceDate要素を待機中... ({wait_attempt + 1}/15)")
 
                 if not service_date_found:
                     logger.error("  serviceDate要素が見つかりません")
@@ -167,7 +169,7 @@ class KantanKaigoFastScraper:
                         return False
 
                 # 現在の日付を取得（形式: "2025-11-01"）
-            current_date_val = self.driver.execute_script(
+                current_date_val = self.driver.execute_script(
                     "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
 
                 if not current_date_val:
@@ -191,9 +193,9 @@ class KantanKaigoFastScraper:
                             (By.CSS_SELECTOR, ".list_table")))
                     except:
                         pass
-                return True
+                    return True
 
-            logger.info(
+                logger.info(
                     f"  日付変更: {current_date_val} -> {target_year}年{target_month}月 (試行 {retry + 1}/{max_retries})")
 
                 # カレンダーピッカーを開く（既に開いている場合はスキップ）
@@ -216,8 +218,8 @@ class KantanKaigoFastScraper:
                         self.driver.execute_script(
                             "$('#ui-monthpicker-div').hide(); $('.ui-monthpicker-trigger').click();")
                         time.sleep(0.3)
-            except:
-                pass
+                    except:
+                        pass
 
                 # 年を選択（存在する場合）
                 try:
@@ -310,10 +312,10 @@ class KantanKaigoFastScraper:
                             try:
                                 self.wait.until(EC.presence_of_element_located(
                                     (By.CSS_SELECTOR, ".list_table")))
-            except:
-                pass
+                            except:
+                                pass
                             time.sleep(0.5)
-            return True
+                            return True
                         else:
                             logger.debug(
                                 f"  待機中... 現在: {updated_year_month}, 目標: {target_year_month}")
@@ -326,7 +328,7 @@ class KantanKaigoFastScraper:
                     logger.warning(f"  年月の設定確認に失敗。リトライします...")
                     time.sleep(1)
 
-        except Exception as e:
+            except Exception as e:
                 logger.warning(
                     f"  日付変更処理でエラー (試行 {retry + 1}/{max_retries}): {e}")
                 if retry < max_retries - 1:
@@ -337,7 +339,7 @@ class KantanKaigoFastScraper:
                     return False
 
         logger.error("  年月の設定に失敗しました（最大リトライ回数に達しました）")
-            return False
+        return False
 
     def scrape_schedule_table(self):
         """一覧形式のテーブルからデータを抽出"""
@@ -369,18 +371,16 @@ class KantanKaigoFastScraper:
             loop_count = len(dates)
             for i in range(loop_count):
                 try:
-                date_txt = dates[i].text.strip()
-                if not date_txt:
-                    continue
+                    date_txt = dates[i].text.strip()
+                    if not date_txt:
+                        continue
 
                     time_txt = times[i].text.strip() if i < len(times) else ""
-                    service_txt = services[i].text.strip(
-                    ) if i < len(services) else ""
-                    staff_txt = staffs[i].text.strip(
-                    ) if i < len(staffs) else ""
+                    service_txt = services[i].text.strip() if i < len(services) else ""
+                    staff_txt = staffs[i].text.strip() if i < len(staffs) else ""
 
-                schedules.append({
-                    "date": date_txt,
+                    schedules.append({
+                        "date": date_txt,
                         "time": time_txt,
                         "service": service_txt,
                         "staff": staff_txt
