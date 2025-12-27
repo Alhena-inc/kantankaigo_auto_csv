@@ -136,99 +136,156 @@ class KantanKaigoFastScraper:
 
     def ensure_list_view_and_date(self, target_year, target_month):
         """カレンダーの年月を合わせる処理"""
-        max_retries = 3
+        max_retries = 2
         for retry in range(max_retries):
             try:
-                # 現在の日付を取得
+                # 現在の日付を取得（形式: "2025-11-01"）
                 current_date_val = self.driver.execute_script(
                     "return document.getElementById('serviceDate').value")
-                target_str = f"{target_year}/{target_month:02d}"
+                # 年月部分を抽出（"2025-11-01" -> "2025-11"）
+                current_year_month = "-".join(current_date_val.split("-")[:2])
+                target_year_month = f"{target_year}-{target_month:02d}"
 
                 # 既に正しい年月が設定されているか確認
-                if target_str in current_date_val:
+                if current_year_month == target_year_month:
                     logger.info(f"  年月は既に正しく設定されています: {current_date_val}")
-                    # 念のため、テーブルが読み込まれるまで待機
-                    self.wait.until(EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, ".day.edit, .list_table")))
+                    # テーブルが読み込まれるまで待機（短縮）
+                    try:
+                        self.wait.until(EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, ".list_table")))
+                    except:
+                        pass
                     return True
 
                 logger.info(
                     f"  日付変更: {current_date_val} -> {target_year}年{target_month}月 (試行 {retry + 1}/{max_retries})")
 
-                # カレンダーピッカーを開く
+                # カレンダーピッカーを開く（既に開いている場合はスキップ）
                 try:
-                    trigger = self.wait.until(EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, ".ui-monthpicker-trigger")))
-                    trigger.click()
-                    time.sleep(0.5)
-                except Exception as e:
-                    logger.warning(f"  カレンダートリガーのクリックに失敗: {e}")
-                    # 代替方法: JavaScriptで直接クリック
-                    self.driver.execute_script(
-                        "$('.ui-monthpicker-trigger').click();")
-                    time.sleep(0.5)
+                    # 月ピッカーが既に表示されているかチェック
+                    monthpicker_visible = self.driver.execute_script(
+                        "return $('#ui-monthpicker-div').is(':visible');")
 
-                # 年を選択
+                    if not monthpicker_visible:
+                        # JavaScriptで直接クリック（より確実）
+                        self.driver.execute_script(
+                            "$('.ui-monthpicker-trigger').click();")
+                        time.sleep(0.3)
+                    else:
+                        logger.info("  月ピッカーは既に開いています")
+                except Exception as e:
+                    logger.warning(f"  カレンダートリガーの処理に失敗: {e}")
+                    # フォールバック: 強制的にJavaScriptでクリック
+                    try:
+                        self.driver.execute_script(
+                            "$('#ui-monthpicker-div').hide(); $('.ui-monthpicker-trigger').click();")
+                        time.sleep(0.3)
+                    except:
+                        pass
+
+                # 年を選択（存在する場合）
                 try:
                     year_select = Select(self.wait.until(EC.presence_of_element_located(
                         (By.CSS_SELECTOR, "select.ui-datepicker-year"))))
-                    year_select.select_by_value(str(target_year))
-                    logger.info(f"  年を {target_year} に設定")
+                    current_year = year_select.first_selected_option.get_attribute(
+                        "value")
+                    if current_year != str(target_year):
+                        year_select.select_by_value(str(target_year))
+                        logger.info(f"  年を {target_year} に設定")
+                        time.sleep(0.3)  # 年変更後の待機
                 except Exception as e:
-                    logger.error(f"  年の選択に失敗: {e}")
-                    raise
+                    logger.warning(f"  年の選択に失敗（スキップ）: {e}")
 
-                # 月を選択（0ベースなので target_month - 1）
+                # 月を選択（<a>タグで直接クリック、0ベースなので target_month - 1）
+                month_index = target_month - 1
                 try:
-                    month_select = Select(self.wait.until(EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "select.ui-datepicker-month"))))
-                    month_select.select_by_value(str(target_month - 1))
-                    logger.info(f"  月を {target_month} に設定")
-                except Exception as e:
-                    logger.error(f"  月の選択に失敗: {e}")
-                    raise
+                    # 方法1: JavaScriptで直接クリック
+                    self.driver.execute_script(
+                        f"$('#ui-monthpicker-div a[data-month=\"{month_index}\"]').click();")
+                    logger.info(
+                        f"  月を {target_month} に設定（data-month={month_index}）")
 
-                # OKボタンをクリック
-                try:
-                    ok_btns = self.wait.until(EC.presence_of_all_elements_located(
-                        (By.CSS_SELECTOR, ".ui-datepicker-ok, button.ui-priority-primary")))
-                    if ok_btns:
-                        ok_btns[0].click()
-                        logger.info("  OKボタンをクリック")
-                    else:
-                        logger.warning("  OKボタンが見つかりません")
-                except Exception as e:
-                    logger.error(f"  OKボタンのクリックに失敗: {e}")
-                    raise
+                    # 月ピッカーが閉じられるまで待機
+                    time.sleep(0.5)
+                    for _ in range(10):  # 最大3秒待機
+                        monthpicker_visible = self.driver.execute_script(
+                            "return $('#ui-monthpicker-div').is(':visible');")
+                        if not monthpicker_visible:
+                            break
+                        time.sleep(0.3)
 
-                # 年月が正しく設定されるまで待機（最大10秒）
+                    # 方法2: serviceDateを直接設定してからページをリロード（フォールバック）
+                    # まず通常のクリックを試し、失敗した場合に使用
+                    time.sleep(1)  # 初期待機
+
+                    # もし更新されていない場合、直接設定を試す
+                    check_date = self.driver.execute_script(
+                        "return document.getElementById('serviceDate').value")
+                    check_year_month = "-".join(check_date.split("-")[:2])
+                    if check_year_month != target_year_month:
+                        logger.info("  直接設定を試行します...")
+                        # serviceDateを直接設定
+                        self.driver.execute_script(
+                            f"document.getElementById('serviceDate').value = '{target_year}-{target_month:02d}-01';")
+                        # changeイベントを発火
+                        self.driver.execute_script(
+                            "$('#serviceDate').trigger('change');")
+                        time.sleep(1)
+
+                except Exception as e:
+                    logger.warning(f"  JavaScriptでの月選択に失敗: {e}")
+                    # フォールバック: Seleniumでクリック
+                    try:
+                        month_link = self.wait.until(EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, f"#ui-monthpicker-div a[data-month='{month_index}']")))
+                        # スクロールして要素を表示
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView(true);", month_link)
+                        time.sleep(0.2)
+                        month_link.click()
+                        logger.info(f"  Seleniumで月を選択しました")
+                        time.sleep(1)
+                    except Exception as e2:
+                        logger.error(f"  月の選択が完全に失敗: {e2}")
+                        raise
+
+                # 年月が正しく設定されるまで待機（最大10秒に延長）
                 wait_time = 0
                 while wait_time < 10:
-                    time.sleep(0.5)
+                    time.sleep(0.5)  # 待機間隔
                     wait_time += 0.5
                     try:
                         updated_date_val = self.driver.execute_script(
                             "return document.getElementById('serviceDate').value")
-                        if target_str in updated_date_val:
+                        updated_year_month = "-".join(
+                            updated_date_val.split("-")[:2])
+                        if updated_year_month == target_year_month:
                             logger.info(f"  年月の設定が確認されました: {updated_date_val}")
                             # テーブルが読み込まれるまで待機
-                            self.wait.until(EC.presence_of_element_located(
-                                (By.CSS_SELECTOR, ".day.edit, .list_table")))
-                            time.sleep(1)  # 追加の待機時間
+                            try:
+                                self.wait.until(EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, ".list_table")))
+                            except:
+                                pass
+                            time.sleep(0.5)
                             return True
-                    except:
+                        else:
+                            logger.debug(
+                                f"  待機中... 現在: {updated_year_month}, 目標: {target_year_month}")
+                    except Exception as e:
+                        logger.debug(f"  日付取得エラー: {e}")
                         pass
 
                 # リトライ前に少し待機
                 if retry < max_retries - 1:
                     logger.warning(f"  年月の設定確認に失敗。リトライします...")
-                    time.sleep(2)
+                    time.sleep(1)
 
             except Exception as e:
                 logger.warning(
                     f"  日付変更処理でエラー (試行 {retry + 1}/{max_retries}): {e}")
                 if retry < max_retries - 1:
-                    time.sleep(2)
+                    time.sleep(1)
                     continue
                 else:
                     logger.error(f"  日付変更処理が最終的に失敗しました: {e}")
@@ -241,12 +298,11 @@ class KantanKaigoFastScraper:
         """一覧形式のテーブルからデータを抽出"""
         schedules = []
         try:
-            # テーブルが読み込まれるまで待機
-            logger.info("  テーブル要素の読み込みを待機中...")
+            # テーブルが読み込まれるまで待機（短縮）
             try:
                 self.wait.until(EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, ".day.edit, .list_table")))
-                time.sleep(1)  # 追加の待機時間でテーブルが完全に読み込まれるのを待つ
+                    (By.CSS_SELECTOR, ".list_table")))
+                time.sleep(0.3)  # 待機時間を短縮
             except TimeoutException:
                 logger.warning("  テーブル要素が見つかりません。空の結果を返します。")
                 return schedules
@@ -258,19 +314,18 @@ class KantanKaigoFastScraper:
                 By.CSS_SELECTOR, ".service.edit")
             staffs = self.driver.find_elements(By.CSS_SELECTOR, ".staff.edit")
 
-            logger.info(
-                f"  取得した要素数: 日付={len(dates)}, 時間={len(times)}, サービス={len(services)}, スタッフ={len(staffs)}")
-
             if len(dates) == 0:
                 logger.warning("  日付要素が1つも見つかりませんでした")
                 return schedules
+
+            logger.info(
+                f"  取得した要素数: 日付={len(dates)}, 時間={len(times)}, サービス={len(services)}, スタッフ={len(staffs)}")
 
             loop_count = len(dates)
             for i in range(loop_count):
                 try:
                     date_txt = dates[i].text.strip()
                     if not date_txt:
-                        logger.debug(f"  インデックス {i}: 日付が空のためスキップ")
                         continue
 
                     time_txt = times[i].text.strip() if i < len(times) else ""
@@ -391,17 +446,45 @@ class KantanKaigoFastScraper:
                 logger.info(f"[{idx}/{total}] {name} (PID: {pid}) の処理を開始...")
 
                 try:
-                    # ページに移動
-                    logger.info(f"  URLにアクセス: {target_url}")
-                    self.driver.get(target_url)
+                    # ページに移動（URLパラメータで年月を指定してみる）
+                    # ただし、この方法が動作しない可能性もあるので、通常のURLも試す
+                    target_url_with_params = f"{target_url}?year={target_year}&month={target_month}"
+                    self.driver.get(target_url_with_params)
 
-                    # ページが読み込まれるまで待機
-                    time.sleep(2)
+                    # ページが読み込まれるまで待機（短縮）
+                    try:
+                        self.wait.until(EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "#serviceDate, .list_table")))
+                    except:
+                        time.sleep(0.5)  # フォールバック
 
-                    # 年月を設定
-                    logger.info(f"  年月を設定: {target_year}年{target_month}月")
-                    date_set_success = self.ensure_list_view_and_date(
-                        target_year, target_month)
+                    # URLパラメータが効いているか確認
+                    current_date_val = self.driver.execute_script(
+                        "return document.getElementById('serviceDate').value")
+                    current_year_month = "-".join(
+                        current_date_val.split("-")[:2])
+                    target_year_month = f"{target_year}-{target_month:02d}"
+
+                    if current_year_month == target_year_month:
+                        logger.info(
+                            f"  URLパラメータで年月が正しく設定されました: {current_date_val}")
+                        # テーブルが読み込まれるまで待機
+                        try:
+                            self.wait.until(EC.presence_of_element_located(
+                                (By.CSS_SELECTOR, ".list_table")))
+                        except:
+                            pass
+                        time.sleep(0.5)
+                        # 年月設定をスキップしてデータ抽出へ
+                        date_set_success = True
+                    else:
+                        # 通常の年月設定処理を実行
+                        date_set_success = None
+
+                    # 年月を設定（URLパラメータで設定できなかった場合のみ）
+                    if date_set_success is None:
+                        date_set_success = self.ensure_list_view_and_date(
+                            target_year, target_month)
 
                     if not date_set_success:
                         logger.error(f"  {name}: 年月の設定に失敗しました")
@@ -409,12 +492,10 @@ class KantanKaigoFastScraper:
                         continue
 
                     # データを抽出
-                    logger.info(f"  スケジュールデータを抽出中...")
                     data = self.scrape_schedule_table()
 
                     if len(data) == 0:
-                        logger.warning(
-                            f"  {name}: データが0件でした。年月が正しく設定されているか確認してください。")
+                        logger.warning(f"  {name}: データが0件でした。")
                         # 現在の日付を確認
                         try:
                             current_date = self.driver.execute_script(
