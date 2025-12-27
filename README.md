@@ -58,29 +58,50 @@ npm run dev
 
 ブラウザで [http://localhost:3000](http://localhost:3000) を開きます。
 
-## Vercelへのデプロイ
+## Renderへのデプロイ（推奨）
 
-### 1. Vercelアカウントの準備
+### 1. Renderアカウントの準備
 
-[Vercel](https://vercel.com)にアカウントを作成し、GitHubリポジトリと連携します。
+1. [Render](https://render.com)にアクセスしてアカウントを作成（GitHubアカウントでサインイン可能）
+2. GitHubアカウントと連携
 
-### 2. 環境変数の設定
+### 2. 新しいWebサービスを作成
 
-Vercelのダッシュボードで以下の環境変数を設定：
+1. Renderダッシュボードで「New +」→「Web Service」を選択
+2. GitHubリポジトリ `kantankaigo_auto_csv` を選択
+3. 以下の設定を行う：
+   - **Name**: `kantankaigo-auto-csv`（任意の名前）
+   - **Environment**: `Docker`
+   - **Region**: `Oregon (US West)` または `Singapore (Asia Pacific)`
+   - **Branch**: `main`
+   - **Root Directory**: （空白のまま）
+   - **Dockerfile Path**: `./Dockerfile`
+   - **Instance Type**: `Starter`（無料プランは15分後にスリープするため、本番環境では有料プラン推奨）
 
-- `KANTAN_USERNAME`
-- `KANTAN_PASSWORD`
-- `KANTAN_GROUP_NAME`
+### 3. 環境変数の設定
 
-### 3. デプロイ
+Renderダッシュボードの「Environment」セクションで、以下の環境変数を追加：
 
-```bash
-# Vercel CLIを使用する場合
-npm i -g vercel
-vercel
-```
+- `KANTAN_USERNAME` = あなたのユーザー名
+- `KANTAN_PASSWORD` = あなたのパスワード
+- `KANTAN_GROUP_NAME` = あなたのグループ名
+- `NODE_ENV` = `production`
 
-または、GitHubにプッシュすると自動的にデプロイされます。
+### 4. デプロイ
+
+1. 「Create Web Service」をクリック
+2. 初回ビルドが開始されます（5-10分程度かかります）
+3. デプロイが完了すると、URLが表示されます（例: `https://kantankaigo-auto-csv.onrender.com`）
+
+### 5. 動作確認
+
+デプロイされたURLにアクセスして、アプリケーションが正常に動作することを確認してください。
+
+### 注意事項
+
+- **無料プラン**: 15分間リクエストがないとスリープします。初回アクセス時に起動するまで時間がかかります
+- **有料プラン**: 常時起動で、より高速に動作します（Starterプラン: $7/月）
+- **ビルド時間**: 初回ビルドは5-10分程度かかります（Dockerイメージのビルドのため）
 
 ## ⚠️ 重要な注意事項
 
@@ -160,4 +181,3 @@ Node.jsネイティブのヘッドレスブラウザを使用：
 ## ライセンス
 
 MIT
-
