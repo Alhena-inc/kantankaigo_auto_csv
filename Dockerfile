@@ -58,8 +58,8 @@ COPY requirements.txt ./
 # Node.jsの依存関係をインストール（devDependenciesも含める）
 RUN npm ci
 
-# Pythonの依存関係をインストール
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Pythonの依存関係をインストール（--break-system-packagesが必要）
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # アプリケーションのファイルをコピー
 COPY . .
