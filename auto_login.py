@@ -139,9 +139,30 @@ class KantanKaigoFastScraper:
         max_retries = 2
         for retry in range(max_retries):
             try:
+                # serviceDate要素が存在するまで待機（Render環境での読み込み遅延対策）
+                try:
+                    self.wait.until(EC.presence_of_element_located(
+                        (By.ID, "serviceDate")))
+                except TimeoutException:
+                    logger.error("  serviceDate要素が見つかりません")
+                    if retry < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    else:
+                        return False
+                
                 # 現在の日付を取得（形式: "2025-11-01"）
                 current_date_val = self.driver.execute_script(
-                    "return document.getElementById('serviceDate').value")
+                    "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                
+                if not current_date_val:
+                    logger.error("  serviceDateの値が取得できませんでした")
+                    if retry < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    else:
+                        return False
+                
                 # 年月部分を抽出（"2025-11-01" -> "2025-11"）
                 current_year_month = "-".join(current_date_val.split("-")[:2])
                 target_year_month = f"{target_year}-{target_month:02d}"
@@ -220,17 +241,21 @@ class KantanKaigoFastScraper:
 
                     # もし更新されていない場合、直接設定を試す
                     check_date = self.driver.execute_script(
-                        "return document.getElementById('serviceDate').value")
-                    check_year_month = "-".join(check_date.split("-")[:2])
-                    if check_year_month != target_year_month:
-                        logger.info("  直接設定を試行します...")
-                        # serviceDateを直接設定
-                        self.driver.execute_script(
-                            f"document.getElementById('serviceDate').value = '{target_year}-{target_month:02d}-01';")
-                        # changeイベントを発火
-                        self.driver.execute_script(
-                            "$('#serviceDate').trigger('change');")
-                        time.sleep(1)
+                        "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                    
+                    if check_date:
+                        check_year_month = "-".join(check_date.split("-")[:2])
+                        if check_year_month != target_year_month:
+                            logger.info("  直接設定を試行します...")
+                            # serviceDateを直接設定
+                            self.driver.execute_script(
+                                f"var el = document.getElementById('serviceDate'); if (el) {{ el.value = '{target_year}-{target_month:02d}-01'; }}")
+                            # changeイベントを発火
+                            self.driver.execute_script(
+                                "$('#serviceDate').trigger('change');")
+                            time.sleep(1)
+                    else:
+                        logger.warning("  serviceDate要素が見つからないため、直接設定をスキップします")
 
                 except Exception as e:
                     logger.warning(f"  JavaScriptでの月選択に失敗: {e}")
@@ -256,7 +281,12 @@ class KantanKaigoFastScraper:
                     wait_time += 0.5
                     try:
                         updated_date_val = self.driver.execute_script(
-                            "return document.getElementById('serviceDate').value")
+                            "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                        
+                        if not updated_date_val:
+                            logger.debug("  serviceDate要素が見つかりません（待機中）")
+                            continue
+                        
                         updated_year_month = "-".join(
                             updated_date_val.split("-")[:2])
                         if updated_year_month == target_year_month:
@@ -459,24 +489,37 @@ class KantanKaigoFastScraper:
                         time.sleep(0.5)  # フォールバック
 
                     # URLパラメータが効いているか確認
-                    current_date_val = self.driver.execute_script(
-                        "return document.getElementById('serviceDate').value")
-                    current_year_month = "-".join(
-                        current_date_val.split("-")[:2])
+                    # serviceDate要素が存在するまで待機
+                    try:
+                        self.wait.until(EC.presence_of_element_located(
+                            (By.ID, "serviceDate")))
+                    except TimeoutException:
+                        logger.warning("  serviceDate要素が見つかりません（URLパラメータ確認をスキップ）")
+                        current_date_val = None
+                    else:
+                        current_date_val = self.driver.execute_script(
+                            "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                    
                     target_year_month = f"{target_year}-{target_month:02d}"
 
-                    if current_year_month == target_year_month:
-                        logger.info(
-                            f"  URLパラメータで年月が正しく設定されました: {current_date_val}")
-                        # テーブルが読み込まれるまで待機
-                        try:
-                            self.wait.until(EC.presence_of_element_located(
-                                (By.CSS_SELECTOR, ".list_table")))
-                        except:
-                            pass
-                        time.sleep(0.5)
-                        # 年月設定をスキップしてデータ抽出へ
-                        date_set_success = True
+                    if current_date_val:
+                        current_year_month = "-".join(
+                            current_date_val.split("-")[:2])
+                        if current_year_month == target_year_month:
+                            logger.info(
+                                f"  URLパラメータで年月が正しく設定されました: {current_date_val}")
+                            # テーブルが読み込まれるまで待機
+                            try:
+                                self.wait.until(EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, ".list_table")))
+                            except:
+                                pass
+                            time.sleep(0.5)
+                            # 年月設定をスキップしてデータ抽出へ
+                            date_set_success = True
+                        else:
+                            # 通常の年月設定処理を実行
+                            date_set_success = None
                     else:
                         # 通常の年月設定処理を実行
                         date_set_success = None
