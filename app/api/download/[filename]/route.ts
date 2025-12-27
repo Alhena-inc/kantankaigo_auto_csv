@@ -11,7 +11,8 @@ export async function GET(
     const filePath = path.join(process.cwd(), filename);
 
     // セキュリティチェック：ファイル名に危険な文字が含まれていないか確認
-    if (!/^schedule_\d{4}_\d{1,2}\.csv$/.test(filename)) {
+    // schedule_YYYY_MM.csv または schedule_YYYY_MM_DD.csv のパターンを許可
+    if (!/^schedule_\d{4}_\d{1,2}(_\d{1,2})?\.csv$/.test(filename)) {
       return NextResponse.json(
         { error: '無効なファイル名です' },
         { status: 400 }
@@ -41,4 +42,3 @@ export async function GET(
     );
   }
 }
-

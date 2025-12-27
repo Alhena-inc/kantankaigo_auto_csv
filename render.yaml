@@ -14,4 +14,3 @@ services:
         sync: false  # Renderダッシュボードで設定してください
     plan: starter  # または free (無料プランでは制限があります)
     region: oregon  # または ap-southeast-1 (シンガポール)
-

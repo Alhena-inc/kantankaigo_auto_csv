@@ -211,7 +211,11 @@ class KantanKaigoFastScraper:
 
             logger.info("=" * 50)
             logger.info(f"CSVファイル保存完了: {filename}")
+            logger.info(f"利用者数: {len(results)}名")
             logger.info(f"書き込み行数: {count}行")
+            # 各利用者のデータ件数をログ出力
+            for name, scheds in results.items():
+                logger.info(f"  - {name}: {len(scheds)}件")
             logger.info("=" * 50)
 
             # ファイル名を標準出力に出力（Node.js側で取得するため）
@@ -249,6 +253,7 @@ class KantanKaigoFastScraper:
 
             all_results = {}
             total = len(customers)
+            logger.info(f"合計 {total} 名の利用者を処理します")
 
             # 2. 全員分ループ
             for idx, cust in enumerate(customers, 1):
@@ -266,10 +271,16 @@ class KantanKaigoFastScraper:
                     self.ensure_list_view_and_date(target_year, target_month)
                     data = self.scrape_schedule_table()
                     all_results[name] = data
+                    logger.info(f"  -> {name}: {len(data)}件のデータを取得しました")
                 except Exception as e:
-                    logger.error(f"  -> 処理失敗: {e}")
+                    logger.error(f"  -> {name} の処理失敗: {e}")
+                    # エラーが発生しても空のリストを追加（全員分の記録を保持）
+                    all_results[name] = []
+                    import traceback
+                    logger.error(traceback.format_exc())
 
             # 3. CSV保存とログ出力
+            logger.info(f"全員分の処理が完了しました。取得した利用者数: {len(all_results)}名")
             self.update_progress(95, "CSVファイルを保存しています...")
             self.save_to_csv(target_year, target_month,
                              all_results, target_day)
