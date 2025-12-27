@@ -75,11 +75,22 @@ class KantanKaigoFastScraper:
         """利用者一覧ページから、全員の「名前」と「PID」を一括取得する"""
         logger.info("利用者情報のリストアップを開始...")
         try:
-            self.driver.find_element(By.ID, "headMenuCustomer").click()
-            self.wait.until(EC.presence_of_element_located(
-                (By.ID, "customerList")))
-        except:
-            self.driver.get(f"{BASE_URL}/customers")
+            # 利用者一覧ページに移動
+            try:
+                self.driver.find_element(By.ID, "headMenuCustomer").click()
+                self.wait.until(EC.presence_of_element_located(
+                    (By.ID, "customerList")))
+                time.sleep(1)  # ページ読み込み待機
+            except:
+                logger.info("メニューから遷移できなかったため、直接URLにアクセスします")
+                self.driver.get(f"{BASE_URL}/customers")
+                self.wait.until(EC.presence_of_element_located(
+                    (By.ID, "customerList")))
+                time.sleep(1)  # ページ読み込み待機
+
+        except Exception as e:
+            logger.error(f"利用者一覧ページへのアクセスに失敗: {e}")
+            return []
 
         customers = []
         try:
@@ -87,10 +98,13 @@ class KantanKaigoFastScraper:
             elements = self.driver.find_elements(
                 By.CSS_SELECTOR, "span.planJisseki")
 
-            for el in elements:
+            logger.info(f"見つかったplanJisseki要素数: {len(elements)}")
+
+            for idx, el in enumerate(elements, 1):
                 try:
                     pid = el.get_attribute("pid")
                     if not pid:
+                        logger.debug(f"要素 {idx}: PID属性が見つかりません")
                         continue
 
                     # 名前を取得
@@ -98,87 +112,189 @@ class KantanKaigoFastScraper:
                         row = el.find_element(By.XPATH, "./ancestor::tr")
                         name_el = row.find_element(By.CSS_SELECTOR, "a.focus")
                         name = name_el.text.strip()
-                    except:
+                        if not name:
+                            name = f"利用者ID_{pid}"
+                    except Exception as e:
+                        logger.warning(f"要素 {idx} (PID: {pid}): 名前の取得に失敗: {e}")
                         name = f"利用者ID_{pid}"
 
                     customers.append({"name": name, "pid": pid})
-                except Exception:
+                    logger.debug(f"利用者追加: {name} (PID: {pid})")
+                except Exception as e:
+                    logger.warning(f"要素 {idx} の処理でエラー: {e}")
                     continue
 
             logger.info(f"合計 {len(customers)} 名の利用者IDを取得しました")
+            if len(customers) == 0:
+                logger.error("利用者が1人も取得できませんでした。ページの構造が変更されている可能性があります。")
             return customers
         except Exception as e:
             logger.error(f"利用者リスト取得エラー: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
     def ensure_list_view_and_date(self, target_year, target_month):
         """カレンダーの年月を合わせる処理"""
-        try:
-            current_date_val = self.driver.execute_script(
-                "return document.getElementById('serviceDate').value")
-            target_str = f"{target_year}/{target_month:02d}"
-
-            if target_str in current_date_val:
-                return True
-
-            logger.info(
-                f"  日付変更: {current_date_val} -> {target_year}年{target_month}月")
-            self.driver.execute_script("$('.ui-monthpicker-trigger').click();")
-            time.sleep(0.5)
-
+        max_retries = 3
+        for retry in range(max_retries):
             try:
-                year_select = Select(self.driver.find_element(
-                    By.CSS_SELECTOR, "select.ui-datepicker-year"))
-                year_select.select_by_value(str(target_year))
-            except:
-                pass
+                # 現在の日付を取得
+                current_date_val = self.driver.execute_script(
+                    "return document.getElementById('serviceDate').value")
+                target_str = f"{target_year}/{target_month:02d}"
 
-            try:
-                month_select = Select(self.driver.find_element(
-                    By.CSS_SELECTOR, "select.ui-datepicker-month"))
-                month_select.select_by_value(str(target_month - 1))
-            except:
-                pass
+                # 既に正しい年月が設定されているか確認
+                if target_str in current_date_val:
+                    logger.info(f"  年月は既に正しく設定されています: {current_date_val}")
+                    # 念のため、テーブルが読み込まれるまで待機
+                    self.wait.until(EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, ".day.edit, .list_table")))
+                    return True
 
-            try:
-                ok_btns = self.driver.find_elements(
-                    By.CSS_SELECTOR, ".ui-datepicker-ok, button.ui-priority-primary")
-                if ok_btns:
-                    ok_btns[0].click()
-                    time.sleep(1.5)
-            except:
-                pass
-            return True
+                logger.info(
+                    f"  日付変更: {current_date_val} -> {target_year}年{target_month}月 (試行 {retry + 1}/{max_retries})")
 
-        except Exception as e:
-            logger.warning(f"  日付変更処理でエラー(無視して続行): {e}")
-            return False
+                # カレンダーピッカーを開く
+                try:
+                    trigger = self.wait.until(EC.element_to_be_clickable(
+                        (By.CSS_SELECTOR, ".ui-monthpicker-trigger")))
+                    trigger.click()
+                    time.sleep(0.5)
+                except Exception as e:
+                    logger.warning(f"  カレンダートリガーのクリックに失敗: {e}")
+                    # 代替方法: JavaScriptで直接クリック
+                    self.driver.execute_script(
+                        "$('.ui-monthpicker-trigger').click();")
+                    time.sleep(0.5)
+
+                # 年を選択
+                try:
+                    year_select = Select(self.wait.until(EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "select.ui-datepicker-year"))))
+                    year_select.select_by_value(str(target_year))
+                    logger.info(f"  年を {target_year} に設定")
+                except Exception as e:
+                    logger.error(f"  年の選択に失敗: {e}")
+                    raise
+
+                # 月を選択（0ベースなので target_month - 1）
+                try:
+                    month_select = Select(self.wait.until(EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "select.ui-datepicker-month"))))
+                    month_select.select_by_value(str(target_month - 1))
+                    logger.info(f"  月を {target_month} に設定")
+                except Exception as e:
+                    logger.error(f"  月の選択に失敗: {e}")
+                    raise
+
+                # OKボタンをクリック
+                try:
+                    ok_btns = self.wait.until(EC.presence_of_all_elements_located(
+                        (By.CSS_SELECTOR, ".ui-datepicker-ok, button.ui-priority-primary")))
+                    if ok_btns:
+                        ok_btns[0].click()
+                        logger.info("  OKボタンをクリック")
+                    else:
+                        logger.warning("  OKボタンが見つかりません")
+                except Exception as e:
+                    logger.error(f"  OKボタンのクリックに失敗: {e}")
+                    raise
+
+                # 年月が正しく設定されるまで待機（最大10秒）
+                wait_time = 0
+                while wait_time < 10:
+                    time.sleep(0.5)
+                    wait_time += 0.5
+                    try:
+                        updated_date_val = self.driver.execute_script(
+                            "return document.getElementById('serviceDate').value")
+                        if target_str in updated_date_val:
+                            logger.info(f"  年月の設定が確認されました: {updated_date_val}")
+                            # テーブルが読み込まれるまで待機
+                            self.wait.until(EC.presence_of_element_located(
+                                (By.CSS_SELECTOR, ".day.edit, .list_table")))
+                            time.sleep(1)  # 追加の待機時間
+                            return True
+                    except:
+                        pass
+
+                # リトライ前に少し待機
+                if retry < max_retries - 1:
+                    logger.warning(f"  年月の設定確認に失敗。リトライします...")
+                    time.sleep(2)
+
+            except Exception as e:
+                logger.warning(
+                    f"  日付変更処理でエラー (試行 {retry + 1}/{max_retries}): {e}")
+                if retry < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                else:
+                    logger.error(f"  日付変更処理が最終的に失敗しました: {e}")
+                    return False
+
+        logger.error("  年月の設定に失敗しました（最大リトライ回数に達しました）")
+        return False
 
     def scrape_schedule_table(self):
         """一覧形式のテーブルからデータを抽出"""
         schedules = []
         try:
+            # テーブルが読み込まれるまで待機
+            logger.info("  テーブル要素の読み込みを待機中...")
+            try:
+                self.wait.until(EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, ".day.edit, .list_table")))
+                time.sleep(1)  # 追加の待機時間でテーブルが完全に読み込まれるのを待つ
+            except TimeoutException:
+                logger.warning("  テーブル要素が見つかりません。空の結果を返します。")
+                return schedules
+
+            # 要素を取得
             dates = self.driver.find_elements(By.CSS_SELECTOR, ".day.edit")
             times = self.driver.find_elements(By.CSS_SELECTOR, ".time.edit")
             services = self.driver.find_elements(
                 By.CSS_SELECTOR, ".service.edit")
             staffs = self.driver.find_elements(By.CSS_SELECTOR, ".staff.edit")
 
+            logger.info(
+                f"  取得した要素数: 日付={len(dates)}, 時間={len(times)}, サービス={len(services)}, スタッフ={len(staffs)}")
+
+            if len(dates) == 0:
+                logger.warning("  日付要素が1つも見つかりませんでした")
+                return schedules
+
             loop_count = len(dates)
             for i in range(loop_count):
-                date_txt = dates[i].text.strip()
-                if not date_txt:
+                try:
+                    date_txt = dates[i].text.strip()
+                    if not date_txt:
+                        logger.debug(f"  インデックス {i}: 日付が空のためスキップ")
+                        continue
+
+                    time_txt = times[i].text.strip() if i < len(times) else ""
+                    service_txt = services[i].text.strip(
+                    ) if i < len(services) else ""
+                    staff_txt = staffs[i].text.strip(
+                    ) if i < len(staffs) else ""
+
+                    schedules.append({
+                        "date": date_txt,
+                        "time": time_txt,
+                        "service": service_txt,
+                        "staff": staff_txt
+                    })
+                except Exception as e:
+                    logger.warning(f"  インデックス {i} のデータ抽出でエラー: {e}")
                     continue
 
-                schedules.append({
-                    "date": date_txt,
-                    "time": times[i].text.strip() if i < len(times) else "",
-                    "service": services[i].text.strip() if i < len(services) else "",
-                    "staff": staffs[i].text.strip() if i < len(staffs) else ""
-                })
+            logger.info(f"  合計 {len(schedules)} 件のスケジュールデータを抽出しました")
 
         except Exception as e:
-            logger.warning(f"  データ抽出エラー: {e}")
+            logger.error(f"  データ抽出エラー: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
         return schedules
 
@@ -214,8 +330,16 @@ class KantanKaigoFastScraper:
             logger.info(f"利用者数: {len(results)}名")
             logger.info(f"書き込み行数: {count}行")
             # 各利用者のデータ件数をログ出力
+            data_count = 0
+            no_data_count = 0
             for name, scheds in results.items():
-                logger.info(f"  - {name}: {len(scheds)}件")
+                if len(scheds) > 0:
+                    logger.info(f"  ✓ {name}: {len(scheds)}件")
+                    data_count += 1
+                else:
+                    logger.warning(f"  ✗ {name}: データなし")
+                    no_data_count += 1
+            logger.info(f"データあり: {data_count}名, データなし: {no_data_count}名")
             logger.info("=" * 50)
 
             # ファイル名を標準出力に出力（Node.js側で取得するため）
@@ -264,20 +388,50 @@ class KantanKaigoFastScraper:
                 progress = 30 + int((idx / total) * 60)
                 self.update_progress(
                     progress, f"[{idx}/{total}] {name} の処理中...")
-                logger.info(f"[{idx}/{total}] {name} の処理中...")
+                logger.info(f"[{idx}/{total}] {name} (PID: {pid}) の処理を開始...")
 
                 try:
+                    # ページに移動
+                    logger.info(f"  URLにアクセス: {target_url}")
                     self.driver.get(target_url)
-                    self.ensure_list_view_and_date(target_year, target_month)
+
+                    # ページが読み込まれるまで待機
+                    time.sleep(2)
+
+                    # 年月を設定
+                    logger.info(f"  年月を設定: {target_year}年{target_month}月")
+                    date_set_success = self.ensure_list_view_and_date(
+                        target_year, target_month)
+
+                    if not date_set_success:
+                        logger.error(f"  {name}: 年月の設定に失敗しました")
+                        all_results[name] = []
+                        continue
+
+                    # データを抽出
+                    logger.info(f"  スケジュールデータを抽出中...")
                     data = self.scrape_schedule_table()
+
+                    if len(data) == 0:
+                        logger.warning(
+                            f"  {name}: データが0件でした。年月が正しく設定されているか確認してください。")
+                        # 現在の日付を確認
+                        try:
+                            current_date = self.driver.execute_script(
+                                "return document.getElementById('serviceDate').value")
+                            logger.info(f"  現在表示されている日付: {current_date}")
+                        except:
+                            pass
+
                     all_results[name] = data
                     logger.info(f"  -> {name}: {len(data)}件のデータを取得しました")
+
                 except Exception as e:
                     logger.error(f"  -> {name} の処理失敗: {e}")
-                    # エラーが発生しても空のリストを追加（全員分の記録を保持）
-                    all_results[name] = []
                     import traceback
                     logger.error(traceback.format_exc())
+                    # エラーが発生しても空のリストを追加（全員分の記録を保持）
+                    all_results[name] = []
 
             # 3. CSV保存とログ出力
             logger.info(f"全員分の処理が完了しました。取得した利用者数: {len(all_results)}名")

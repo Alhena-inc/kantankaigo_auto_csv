@@ -14,7 +14,7 @@
 - **フロントエンド**: Next.js 14 (React)
 - **バックエンド**: Next.js API Routes
 - **スクレイピング**: Python + Selenium
-- **デプロイ**: Vercel
+- **デプロイ**: Render (Docker)
 
 ## セットアップ
 
@@ -105,52 +105,7 @@ Renderダッシュボードの「Environment」セクションで、以下の環
 
 ## ⚠️ 重要な注意事項
 
-### Vercelでの制限と問題
-
-**Vercelのサーバーレス環境では、このアプリケーションは動作しません。**
-
-理由：
-1. **Selenium/ChromeDriverが動作しない**: Vercelの環境にはChromeDriverやChromeバイナリがインストールされていません
-2. **Pythonスクリプトの実行制限**: サーバーレス関数はリクエスト終了後にプロセスが終了するため、長時間実行されるバックグラウンドジョブが動作しません
-3. **実行時間制限**: 最大300秒（5分）の制限がありますが、Selenium処理はそれ以上かかる可能性があります
-
-### 推奨される代替案
-
-このアプリケーションを本番環境で使用するには、以下のいずれかの方法を推奨します：
-
-#### 1. 別のホスティングサービスを使用（推奨）
-
-以下のサービスでは、Selenium/ChromeDriverが動作します：
-
-- **Railway** (https://railway.app)
-  - Python環境とChromeDriverをサポート
-  - 無料プランあり
-  - デプロイが簡単
-
-- **Render** (https://render.com)
-  - Webサービスとしてデプロイ可能
-  - 無料プランあり
-
-- **Fly.io** (https://fly.io)
-  - Dockerコンテナとしてデプロイ可能
-  - ChromeDriverを含むカスタムイメージを作成可能
-
-#### 2. Puppeteer/Playwrightに変更
-
-Node.jsネイティブのヘッドレスブラウザを使用：
-
-- **Puppeteer**: Chrome/Chromiumを制御
-- **Playwright**: 複数ブラウザをサポート
-
-これらはVercelでも動作する可能性がありますが、設定が複雑です。
-
-#### 3. 外部スクレイピングサービスを使用
-
-- **Browserless** (https://www.browserless.io)
-- **ScrapingBee** (https://www.scrapingbee.com)
-- **Apify** (https://apify.com)
-
-これらのサービスは、Selenium/Puppeteerをクラウドで実行します。
+このアプリケーションは、Selenium/ChromeDriverが必要なため、サーバーレス環境（Vercelなど）では動作しません。Dockerコンテナを実行できるホスティングサービス（Render、Railway、Fly.ioなど）でのデプロイが必要です。
 
 ## 使用方法
 
@@ -174,8 +129,11 @@ Node.jsネイティブのヘッドレスブラウザを使用：
 │   ├── jobManager.ts     # ジョブ管理
 │   └── scraperRunner.ts  # スクレイパー実行
 ├── auto_login.py         # Pythonスクレイピングスクリプト
+├── Dockerfile            # Docker設定（Render用）
+├── render.yaml           # Render設定ファイル
 ├── requirements.txt      # Python依存関係
-└── vercel.json           # Vercel設定
+├── package.json          # Node.js依存関係
+└── tsconfig.json         # TypeScript設定
 ```
 
 ## ライセンス
