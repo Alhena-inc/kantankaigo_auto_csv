@@ -77,13 +77,13 @@ class KantanKaigoFastScraper:
         try:
             # 利用者一覧ページに移動
             try:
-            self.driver.find_element(By.ID, "headMenuCustomer").click()
-            self.wait.until(EC.presence_of_element_located(
-                (By.ID, "customerList")))
+                self.driver.find_element(By.ID, "headMenuCustomer").click()
+                self.wait.until(EC.presence_of_element_located(
+                    (By.ID, "customerList")))
                 time.sleep(1)  # ページ読み込み待機
-        except:
+            except:
                 logger.info("メニューから遷移できなかったため、直接URLにアクセスします")
-            self.driver.get(f"{BASE_URL}/customers")
+                self.driver.get(f"{BASE_URL}/customers")
                 self.wait.until(EC.presence_of_element_located(
                     (By.ID, "customerList")))
                 time.sleep(1)  # ページ読み込み待機
