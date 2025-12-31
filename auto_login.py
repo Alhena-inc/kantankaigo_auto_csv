@@ -237,6 +237,9 @@ class KantanKaigoFastScraper:
                 # 月を選択（<a>タグで直接クリック、0ベースなので target_month - 1）
                 month_index = target_month - 1
                 try:
+                    # 現在のURLを保存（ページ更新を検知するため）
+                    current_url_before = self.driver.current_url
+
                     # 方法1: JavaScriptで直接クリック
                     self.driver.execute_script(
                         f"$('#ui-monthpicker-div a[data-month=\"{month_index}\"]').click();")
@@ -252,13 +255,35 @@ class KantanKaigoFastScraper:
                             break
                         time.sleep(0.3)
 
-                    # 方法2: serviceDateを直接設定してからページをリロード（フォールバック）
-                    # まず通常のクリックを試し、失敗した場合に使用
-                    time.sleep(1)  # 初期待機
+                    # ページが更新されるまで待機（最大10秒に延長）
+                    logger.info("  ページ更新を待機中...")
+                    page_updated = False
+                    for page_wait in range(20):  # 最大10秒待機
+                        time.sleep(0.5)
+                        try:
+                            # serviceDate要素が再表示されるまで待機
+                            element = self.driver.find_element(By.ID, "serviceDate")
+                            if element:
+                                # 要素に値が設定されるまで待機
+                                date_val = self.driver.execute_script(
+                                    "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
+                                if date_val:
+                                    logger.info(f"  ページ更新完了: {date_val}")
+                                    page_updated = True
+                                    break
+                        except:
+                            if page_wait % 4 == 0:  # 2秒ごとにログ出力
+                                logger.debug(f"  ページ更新待機中... ({page_wait * 0.5:.1f}秒)")
+                    
+                    if not page_updated:
+                        logger.warning("  ページ更新の確認に時間がかかっています...")
+
+                    # 追加の待機（ページが完全に読み込まれるまで）
+                    time.sleep(2)
 
                     # もし更新されていない場合、直接設定を試す
                     check_date = self.driver.execute_script(
-                        "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                        "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
 
                     if check_date:
                         check_year_month = "-".join(check_date.split("-")[:2])
@@ -270,7 +295,16 @@ class KantanKaigoFastScraper:
                             # changeイベントを発火
                             self.driver.execute_script(
                                 "$('#serviceDate').trigger('change');")
-                            time.sleep(1)
+                            # ページ更新を待機
+                            time.sleep(2)
+                            # serviceDate要素が再表示されるまで待機
+                            for retry_wait in range(10):
+                                try:
+                                    self.wait.until(EC.presence_of_element_located(
+                                        (By.ID, "serviceDate")))
+                                    break
+                                except:
+                                    time.sleep(0.5)
                     else:
                         logger.warning("  serviceDate要素が見つからないため、直接設定をスキップします")
 
@@ -286,22 +320,51 @@ class KantanKaigoFastScraper:
                         time.sleep(0.2)
                         month_link.click()
                         logger.info(f"  Seleniumで月を選択しました")
-                        time.sleep(1)
+                        # ページ更新を待機
+                        time.sleep(2)
+                        # serviceDate要素が再表示されるまで待機
+                        for retry_wait in range(10):
+                            try:
+                                self.wait.until(EC.presence_of_element_located(
+                                    (By.ID, "serviceDate")))
+                                break
+                            except:
+                                time.sleep(0.5)
                     except Exception as e2:
                         logger.error(f"  月の選択が完全に失敗: {e2}")
                         raise
 
-                # 年月が正しく設定されるまで待機（最大10秒に延長）
+                # 年月が正しく設定されるまで待機（最大20秒に延長）
                 wait_time = 0
-                while wait_time < 10:
+                max_wait_time = 20
+                while wait_time < max_wait_time:
                     time.sleep(0.5)  # 待機間隔
                     wait_time += 0.5
                     try:
+                        # serviceDate要素が存在するか確認（複数の方法で試行）
+                        element = None
+                        try:
+                            element = self.driver.find_element(By.ID, "serviceDate")
+                        except:
+                            # DOMを直接確認
+                            try:
+                                element = self.driver.execute_script(
+                                    "return document.getElementById('serviceDate');")
+                            except:
+                                pass
+                        
+                        if not element:
+                            if wait_time % 2 == 0:  # 2秒ごとにログ出力
+                                logger.debug(f"  serviceDate要素が見つかりません（待機中: {wait_time:.1f}秒）")
+                            continue
+
+                        # 要素に値が設定されているか確認
                         updated_date_val = self.driver.execute_script(
-                            "var el = document.getElementById('serviceDate'); return el ? el.value : null;")
+                            "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
 
                         if not updated_date_val:
-                            logger.debug("  serviceDate要素が見つかりません（待機中）")
+                            if wait_time % 2 == 0:  # 2秒ごとにログ出力
+                                logger.debug(f"  serviceDateの値が取得できません（待機中: {wait_time:.1f}秒）")
                             continue
 
                         updated_year_month = "-".join(
@@ -317,15 +380,25 @@ class KantanKaigoFastScraper:
                             time.sleep(0.5)
                             return True
                         else:
-                            logger.debug(
-                                f"  待機中... 現在: {updated_year_month}, 目標: {target_year_month}")
+                            if wait_time % 2 == 0:  # 2秒ごとにログ出力
+                                logger.debug(
+                                    f"  待機中... 現在: {updated_year_month}, 目標: {target_year_month} ({wait_time:.1f}秒)")
                     except Exception as e:
-                        logger.debug(f"  日付取得エラー: {e}")
+                        if wait_time % 2 == 0:  # 2秒ごとにログ出力
+                            logger.debug(f"  日付取得エラー: {e} ({wait_time:.1f}秒)")
                         pass
 
                 # リトライ前に少し待機
                 if retry < max_retries - 1:
                     logger.warning(f"  年月の設定確認に失敗。リトライします...")
+                    # リトライ時はページを再読み込みして状態をリセット
+                    try:
+                        current_url = self.driver.current_url
+                        logger.info(f"  ページを再読み込みします: {current_url}")
+                        self.driver.get(current_url)
+                        time.sleep(3)  # ページ読み込み待機
+                    except Exception as e:
+                        logger.warning(f"  ページ再読み込みに失敗: {e}")
                     time.sleep(1)
 
             except Exception as e:
@@ -376,8 +449,10 @@ class KantanKaigoFastScraper:
                         continue
 
                     time_txt = times[i].text.strip() if i < len(times) else ""
-                    service_txt = services[i].text.strip() if i < len(services) else ""
-                    staff_txt = staffs[i].text.strip() if i < len(staffs) else ""
+                    service_txt = services[i].text.strip(
+                    ) if i < len(services) else ""
+                    staff_txt = staffs[i].text.strip(
+                    ) if i < len(staffs) else ""
 
                     schedules.append({
                         "date": date_txt,
@@ -502,31 +577,38 @@ class KantanKaigoFastScraper:
                         self.wait.until(EC.presence_of_element_located(
                             (By.CSS_SELECTOR, "body")))
                         # JavaScriptの実行が完了するまで待機
-                        for ready_check in range(5):  # 最大5秒待機
-                            ready_state = self.driver.execute_script("return document.readyState")
+                        for ready_check in range(10):  # 最大10秒待機
+                            ready_state = self.driver.execute_script(
+                                "return document.readyState")
                             if ready_state == "complete":
                                 break
                             time.sleep(1)
-                        time.sleep(2)  # 追加の待機時間（Render環境では長めに）
+                        time.sleep(3)  # 追加の待機時間（Render環境では長めに）
                     except:
-                        time.sleep(2)  # フォールバック
+                        time.sleep(3)  # フォールバック
 
                     # serviceDate要素が存在するまで待機（タイムアウトを延長）
                     service_date_found = False
-                    for wait_attempt in range(10):  # 最大10秒待機
+                    for wait_attempt in range(20):  # 最大20秒待機（Render環境対応）
                         try:
-                            self.wait.until(EC.presence_of_element_located(
-                                (By.ID, "serviceDate")))
-                            # 要素が実際に値を持っているか確認
-                            current_date_val = self.driver.execute_script(
-                                "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
-                            if current_date_val:
-                                service_date_found = True
-                                break
+                            # 要素の存在確認
+                            element = self.driver.find_element(
+                                By.ID, "serviceDate")
+                            if element:
+                                # 要素が実際に値を持っているか確認
+                                current_date_val = self.driver.execute_script(
+                                    "var el = document.getElementById('serviceDate'); return el && el.value ? el.value : null;")
+                                if current_date_val:
+                                    service_date_found = True
+                                    logger.info(
+                                        f"  serviceDate要素を確認: {current_date_val} (待機時間: {wait_attempt + 1}秒)")
+                                    break
                         except:
                             pass
                         time.sleep(1)
-                        logger.debug(f"  serviceDate要素を待機中... ({wait_attempt + 1}/10)")
+                        if wait_attempt % 3 == 0:  # 3秒ごとにログ出力
+                            logger.debug(
+                                f"  serviceDate要素を待機中... ({wait_attempt + 1}/20)")
 
                     if not service_date_found:
                         logger.warning(
