@@ -262,7 +262,8 @@ class KantanKaigoFastScraper:
                         time.sleep(0.5)
                         try:
                             # serviceDate要素が再表示されるまで待機
-                            element = self.driver.find_element(By.ID, "serviceDate")
+                            element = self.driver.find_element(
+                                By.ID, "serviceDate")
                             if element:
                                 # 要素に値が設定されるまで待機
                                 date_val = self.driver.execute_script(
@@ -273,8 +274,9 @@ class KantanKaigoFastScraper:
                                     break
                         except:
                             if page_wait % 4 == 0:  # 2秒ごとにログ出力
-                                logger.debug(f"  ページ更新待機中... ({page_wait * 0.5:.1f}秒)")
-                    
+                                logger.debug(
+                                    f"  ページ更新待機中... ({page_wait * 0.5:.1f}秒)")
+
                     if not page_updated:
                         logger.warning("  ページ更新の確認に時間がかかっています...")
 
@@ -344,7 +346,8 @@ class KantanKaigoFastScraper:
                         # serviceDate要素が存在するか確認（複数の方法で試行）
                         element = None
                         try:
-                            element = self.driver.find_element(By.ID, "serviceDate")
+                            element = self.driver.find_element(
+                                By.ID, "serviceDate")
                         except:
                             # DOMを直接確認
                             try:
@@ -352,10 +355,11 @@ class KantanKaigoFastScraper:
                                     "return document.getElementById('serviceDate');")
                             except:
                                 pass
-                        
+
                         if not element:
                             if wait_time % 2 == 0:  # 2秒ごとにログ出力
-                                logger.debug(f"  serviceDate要素が見つかりません（待機中: {wait_time:.1f}秒）")
+                                logger.debug(
+                                    f"  serviceDate要素が見つかりません（待機中: {wait_time:.1f}秒）")
                             continue
 
                         # 要素に値が設定されているか確認
@@ -364,7 +368,8 @@ class KantanKaigoFastScraper:
 
                         if not updated_date_val:
                             if wait_time % 2 == 0:  # 2秒ごとにログ出力
-                                logger.debug(f"  serviceDateの値が取得できません（待機中: {wait_time:.1f}秒）")
+                                logger.debug(
+                                    f"  serviceDateの値が取得できません（待機中: {wait_time:.1f}秒）")
                             continue
 
                         updated_year_month = "-".join(
