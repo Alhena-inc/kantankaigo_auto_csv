@@ -109,11 +109,55 @@ Renderダッシュボードの「Environment」セクションで、以下の環
 
 ## 使用方法
 
+### Webアプリケーションでの使用
+
 1. ブラウザでアプリを開く
 2. 取得したい年月（および日）を選択
 3. 「スケジュール取得を開始」ボタンをクリック
 4. 処理が完了するまで待機（進捗バーで確認可能）
 5. 完了後、CSVファイルをダウンロード
+
+### ターミナルでの実行
+
+Pythonスクリプトを直接実行することも可能です。
+
+#### 基本的な使用方法
+
+```bash
+# 年月を指定して実行（例: 2025年11月）
+python auto_login.py --year 2025 --month 11
+
+# 特定の日を指定して実行（例: 2025年11月15日）
+python auto_login.py --year 2025 --month 11 --day 15
+```
+
+#### コマンドライン引数
+
+- `--year` (必須): 対象年（例: 2025）
+- `--month` (必須): 対象月（1-12）
+- `--day` (オプション): 対象日（1-31）
+- `--job-id` (オプション): ジョブID（進捗管理用）
+
+#### 実行例
+
+```bash
+# 2025年11月の全データを取得
+python auto_login.py --year 2025 --month 11
+
+# 2025年11月15日のデータを取得
+python auto_login.py --year 2025 --month 11 --day 15
+
+# 環境変数から認証情報を取得する場合
+export KANTAN_USERNAME=your_username
+export KANTAN_PASSWORD=your_password
+export KANTAN_GROUP_NAME=your_group_name
+python auto_login.py --year 2025 --month 11
+```
+
+#### 実行結果
+
+- 実行が成功すると、`schedule_YYYY_MM.csv`（または`schedule_YYYY_MM_DD.csv`）というファイルが生成されます
+- ファイルはUTF-8 BOM形式で保存されるため、Excelで開いても文字化けしません
 
 ## ファイル構造
 
